@@ -58,7 +58,6 @@ export default class ICSPlugin extends Plugin {
 					if (lineText === undefined) {
 						debugger;
 					}
-					console.log(lineText);
 
 					const dateMatch = lineText.match(/^-\s*\[\s*\s*]\s*(\d+:\d+)\s*/);
 					if (dateMatch) {
@@ -73,8 +72,11 @@ export default class ICSPlugin extends Plugin {
 				// TODO: Make the split character and date format settings value
 				const fileDate = moment(activeView.file.basename.split('-')[1], 'YYYYMMDD');
 				const mdArray: string[] = [];
+				const fullDayEvents: string[] = [];
 				const eventUuid = new Set();
 
+				const msInHalfDay = 60 * 60 * 12 * 100;
+				const msInHour = 60 * 60 * 100;
 				for (const calendar in this.data.calendars) {
 					const calendarSetting = this.data.calendars[calendar];
 					console.log(calendarSetting);
@@ -87,10 +89,24 @@ export default class ICSPlugin extends Plugin {
 
 					todayEvents.forEach((e) => {
 						// Prevent duplicate events
-						if (!eventUuid.has(e.uid)) {
-							eventUuid.add(e.uid);
-							mdArray.push(`- [ ] ${moment(e.start).format("HH:mm")} **(${calendarSetting.icsName}) ${e.summary}** ${e.location}`.trim());
-							mdArray.push(`- [ ] ${moment(e.end).format("HH:mm")} BREAK`.trim());
+						const identifier = e.uid || `${e.summary}${e.start}${e.end}`;
+						if (!eventUuid.has(identifier)) {
+							eventUuid.add(identifier);
+							const description = e.description ? `\n  - ${e.description}` : '';
+							const mainDescription = `**(${calendarSetting.icsName}) ${e.summary}** ${e.location || ''} ${description}`.trim();
+							const startTime = moment(e.start).format("HH:mm");
+							const endTime = moment(e.end).format("HH:mm");
+
+							// Allow an hour difference for full day/half day event
+							const timeComparedToHalfday = msInHalfDay - Math.abs(e.end - e.start);
+							const isLongEvent = timeComparedToHalfday < msInHour;
+							if (isLongEvent) {
+								fullDayEvents.push(`- ${mainDescription} *(${startTime} - ${endTime})*`);
+							} else {
+								mdArray.push(`- [ ] ${startTime} ${mainDescription}`);
+								mdArray.push(`- [ ] ${endTime} BREAK`.trim());
+							}
+
 						}
 					});
 				}
@@ -129,9 +145,13 @@ export default class ICSPlugin extends Plugin {
 						templateLine = '';
 					}
 
-					result.push(templateLine.replaceAll(/{{date:(.*)}}/g, (_match, p1) => {
+					let cleanedLine = templateLine.replaceAll(/{{date:(.*)}}/g, (_match, p1) => {
 						return moment().format(p1);
-					}));
+					});
+
+					cleanedLine = cleanedLine.replaceAll(/{{\s*fullDayEvents\s*}}/g, fullDayEvents.join('\n'));
+
+					result.push(cleanedLine);
 				});
 
 				activeView.editor.replaceRange(result.join('\n'), activeView.editor.getCursor());
