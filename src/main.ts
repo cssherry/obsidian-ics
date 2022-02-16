@@ -16,7 +16,8 @@ import {
 
 import {
 	Plugin,
-	request
+	request,
+	normalizePath
 } from 'obsidian';
 import { parseIcs, filterMatchingEvents } from './icalUtils';
 
@@ -28,7 +29,7 @@ export default class ICSPlugin extends Plugin {
 	async addCalendar(calendar: Calendar): Promise<void> {
         this.data.calendars = {
             ...this.data.calendars,
-			[calendar.icsName]: calendar 
+			[calendar.icsName]: calendar
         };
         await this.saveSettings();
     }
@@ -52,9 +53,27 @@ export default class ICSPlugin extends Plugin {
 				key: 'T',
 			}, ],
 			callback: async () => {
+				function getDateFromNote(lineText: string): string | null {
+
+					if (lineText === undefined) {
+						debugger;
+					}
+					console.log(lineText);
+
+					const dateMatch = lineText.match(/^-\s*\[\s*\s*]\s*(\d+:\d+)\s*/);
+					if (dateMatch) {
+						return dateMatch[1];
+					}
+
+					return null;
+				}
+
 				const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				const fileDate = getDateFromFile(activeView.file, "day").format("YYYY-MM-DD");
-				var mdArray: string[] = [];
+
+				// TODO: Make the split character and date format settings value
+				const fileDate = moment(activeView.file.basename.split('-')[1], 'YYYYMMDD');
+				const mdArray: string[] = [];
+				const eventUuid = new Set();
 
 				for (const calendar in this.data.calendars) {
 					const calendarSetting = this.data.calendars[calendar];
@@ -65,13 +84,57 @@ export default class ICSPlugin extends Plugin {
 					}));
 					const todayEvents = filterMatchingEvents(icsArray, fileDate);
 					console.log(todayEvents);
-	
+
 					todayEvents.forEach((e) => {
-						mdArray.push(`- [ ] ${moment(e.start).format("HH:mm")} ${calendarSetting.icsName} ${e.summary} ${e.location}`.trim());
+						// Prevent duplicate events
+						if (!eventUuid.has(e.uid)) {
+							eventUuid.add(e.uid);
+							mdArray.push(`- [ ] ${moment(e.start).format("HH:mm")} **(${calendarSetting.icsName}) ${e.summary}** ${e.location}`.trim());
+							mdArray.push(`- [ ] ${moment(e.end).format("HH:mm")} BREAK`.trim());
+						}
 					});
 				}
 
-				activeView.editor.replaceRange(mdArray.sort().join("\n"), activeView.editor.getCursor());
+				mdArray.sort();
+
+				// TODO: Make template file settings
+				const templateContents = await this.app.vault.adapter.read(normalizePath('zz-Templates/Day Planner.md'));
+
+				const templateLines = templateContents.split('\n');
+				const result: string[] = [];
+				let lastCalendarTime: string;
+				let currCalendarIdx = 0;
+				let currCalendarLine = mdArray[currCalendarIdx];
+				let currCalendarTime = currCalendarLine != undefined ? getDateFromNote(currCalendarLine) : '';
+				templateLines.forEach((templateLine: string): void => {
+					const lineTime = getDateFromNote(templateLine);
+
+					while (lineTime && currCalendarIdx < mdArray.length && lineTime > currCalendarTime) {
+						// Push in start time
+						result.push(currCalendarLine);
+
+						// Push in end time
+						currCalendarLine = mdArray[currCalendarIdx + 1];
+						result.push(currCalendarLine);
+						lastCalendarTime = getDateFromNote(currCalendarLine);
+
+						// Set next start event
+						currCalendarIdx += 2;
+						currCalendarLine = mdArray[currCalendarIdx];
+						currCalendarTime = currCalendarLine != undefined ? getDateFromNote(currCalendarLine) : '';
+					}
+
+					// Delete this line-item if it overlaps with the last calendar event
+					if (lineTime && lastCalendarTime && lineTime <= lastCalendarTime) {
+						templateLine = '';
+					}
+
+					result.push(templateLine.replaceAll(/{{date:(.*)}}/g, (_match, p1) => {
+						return moment().format(p1);
+					}));
+				});
+
+				activeView.editor.replaceRange(result.join('\n'), activeView.editor.getCursor());
 			}
 		});
 	}

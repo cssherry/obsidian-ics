@@ -1,10 +1,10 @@
 {
-  "id": "ics-plugin",
-  "name": "ICS",
+  "id": "ics-plugin-daily",
+  "name": "ICS For Daily Planner",
   "version": "0.9.7",
   "minAppVersion": "0.12.11",
-  "description": "This is a ICS plugin for Obsidian.",
-  "author": "Muness Castle",
-  "authorUrl": "https://github.com/muness",
+  "description": "This is a ICS plugin for Obsidian for daily planner",
+  "author": "cssherry",
+  "authorUrl": "https://github.com/cssherry",
   "isDesktopOnly": true
 }
