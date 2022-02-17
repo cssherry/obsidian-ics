@@ -92,14 +92,16 @@ export default class ICSPlugin extends Plugin {
 						const identifier = e.uid || `${e.summary}${e.start}${e.end}`;
 						if (!eventUuid.has(identifier)) {
 							eventUuid.add(identifier);
-							const description = e.description ? `\n  - ${e.description}` : '';
+							const cleanDesc: string[] = e.description ? e.description.split('\n').map((desc: string) => desc.trim()).filter((desc: string) => !!desc) : [];
+							const description = e.description ? `\n    - ${cleanDesc.join('\n    - ')}` : '';
 							const mainDescription = `**(${calendarSetting.icsName}) ${e.summary}** ${e.location || ''} ${description}`.trim();
-							const startTime = moment(e.start).format("HH:mm");
-							const endTime = moment(e.end).format("HH:mm");
 
 							// Allow an hour difference for full day/half day event
 							const timeComparedToHalfday = msInHalfDay - Math.abs(e.end - e.start);
 							const isLongEvent = timeComparedToHalfday < msInHour;
+							const dateFormatter = isLongEvent ? 'MM/DD HH:mm' : 'HH:mm'
+							const startTime = moment(e.start).format(dateFormatter);
+							const endTime = moment(e.end).format(dateFormatter);
 							if (isLongEvent) {
 								fullDayEvents.push(`- ${mainDescription} *(${startTime} - ${endTime})*`);
 							} else {
