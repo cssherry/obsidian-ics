@@ -3,11 +3,11 @@ const moment = require('moment');
 
 export function filterMatchingEvents(icsArray: any[], dayToMatch: string) {
 	var matchingEvents = [];
-	matchingEvents = findRecurringEvents(icsArray, dayToMatch);
+	matchingEvents = findRecurringEvents(icsArray, dayToMatch); // TODO: Handle when recurring event doesn't start on day, but overlaps with day
 
-	// find non-recurring events on the day
+	// find non-recurring events on the day -- allow those to start and stop before or after the day (respectively)
 	icsArray.map((e) => {
-		if (moment(e.start).isSame(dayToMatch, "day")) {
+		if (moment(e.start).isSame(dayToMatch, "day") || moment(e.end).isSame(dayToMatch, "day") || moment(dayToMatch).isBetween(e.start, e.end)) {
 			matchingEvents.push(e);
 		}
 	});
@@ -18,7 +18,7 @@ function findRecurringEvents(icsArray: any[], dayToMatch: string) {
 	var matchingRecurringEvents: any[] = [];
 
 	const rangeStart = moment(dayToMatch);
-	const rangeEnd = moment(dayToMatch).add(1439, 'minutes');
+	const rangeEnd = moment(dayToMatch).add(60 * 24, 'minutes');
 	// console.log(rangeStart.format(), rangeEnd.format());
 	for (const k in icsArray) {
 		const event = icsArray[k];
